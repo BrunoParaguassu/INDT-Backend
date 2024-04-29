@@ -1,4 +1,3 @@
-# auth.py
 from flask import jsonify, request
 from flask_jwt_extended import jwt_required, create_access_token, get_jwt_identity
 from models import User
@@ -15,5 +14,6 @@ def initialize_jwt(app):
         if not user or not user.check_password(senha):
             return jsonify({'message': 'Credenciais inválidas'}), 401
 
-        access_token = create_access_token(identity=user.id)
+        access_token = create_access_token(identity=user.id, nivel_acesso=user.nivel_acesso)
         return jsonify(access_token=access_token, user=user.to_dict())
+

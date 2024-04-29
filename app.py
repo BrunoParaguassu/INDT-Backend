@@ -5,7 +5,7 @@ from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_cors import CORS
 from datetime import datetime, timedelta
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:0000@localhost/sistema_usuarios'
@@ -59,6 +59,7 @@ class UserList(Resource):
         user_list = [user.to_dict() for user in users]
         return user_list
 
+    @jwt_required()  # Requer autenticação JWT para acessar este endpoint
     @api.expect(user_fields)
     @api.marshal_with(user_fields, code=201)
     def post(self):
@@ -83,10 +84,14 @@ class UserResource(Resource):
         user = User.query.get_or_404(user_id)
         return user
 
+    @jwt_required()  # Requer autenticação JWT para acessar este endpoint
     @api.expect(user_fields)
     @api.marshal_with(user_fields)
     def put(self, user_id):
+        current_user_id = get_jwt_identity()
         user = User.query.get_or_404(user_id)
+        if user.id != current_user_id:
+            return {'message': 'Você só pode atualizar seu próprio usuário'}, 403
         data = api.payload
         if 'nome' in data:
             user.nome = data['nome']
@@ -101,8 +106,13 @@ class UserResource(Resource):
         db.session.commit()
         return user
 
+    @jwt_required()  # Requer autenticação JWT para acessar este endpoint
     @api.response(204, 'Usuário deletado com sucesso')
     def delete(self, user_id):
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get_or_404(current_user_id)
+        if current_user.nivel_acesso != 'admin':
+            return {'message': 'Apenas administradores podem excluir usuários'}, 403
         user = User.query.get_or_404(user_id)
         db.session.delete(user)
         db.session.commit()
@@ -136,7 +146,7 @@ class UserLogin(Resource):
         user = User.query.filter_by(email=email).first()
         if not user or not user.check_password(senha):
             return {'message': 'E-mail ou senha inválidos'}, 401
-        access_token = create_access_token(identity=user.id)
+        access_token = create_access_token(identity=user.id, additional_claims={'nivel_acesso': user.nivel_acesso})
         return {'access_token': access_token}
 
 api.add_resource(UserList, '/users')
